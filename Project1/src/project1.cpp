@@ -138,7 +138,7 @@ void output(double r, double *u)
   ofile << setiosflags(ios::showpoint | ios::uppercase);
   ofile << setw(15) << setprecision(8) << r;
   ofile << setw(15) << setprecision(8) << u[0];
-  ofile << setw(15) << setprecision(8) << u[1];
+  ofile << setw(15) << setprecision(8) << u[1] << std::endl;
 }  // end of function output
 
 /*   This function upgrades a function y (input as a pointer)
