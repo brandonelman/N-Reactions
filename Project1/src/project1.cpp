@@ -8,11 +8,10 @@
 //#include "lib.h"
 using namespace  std;
 // output file as global variable
-ofstream ofile;
 // function declarations
 void derivatives(double, double*,  double*,
                     int, double);
-void initialize ( double&, int&, int&);
+void initialize (int&);
 void output( double, double *);
 void runge_kutta_4(double *, double *, int, double, double, 
     double *, int, double, void (*)(double, double *, double *, int, double));
@@ -72,93 +71,160 @@ std::complex<double> calculatePhaseShift(std::complex<double> S_L){
   return phase_shift;
 }
 
+void output_radial(std::ofstream& ofile, double r, double *u){
+  ofile << setiosflags(ios::showpoint | ios::uppercase);
+  ofile << setw(15) << setprecision(8) << r;
+  ofile << setw(15) << setprecision(8) << u[0];
+  ofile << setw(15) << setprecision(8) << u[1] << std::endl;
+}  // end of function output
+
+
+void output_phase_shifts(std::ofstream& ofile, std::complex<double> phase_shift[3][500], double E[500]){
+  const int NUM_E_VALUES = 500;
+  const int NUM_L_VALUES = 3;
+
+    for (int i = 0; i < NUM_E_VALUES; i++){
+      ofile << setiosflags(ios::showpoint | ios::uppercase);
+      ofile << setw(15) << setprecision(8) << E[i];
+      ofile << setw(15) << setprecision(8) << phase_shift[0][i].real();
+      ofile << setw(15) << setprecision(8) << phase_shift[1][i].real();
+      ofile << setw(15) << setprecision(8) << phase_shift[2][i].real() << std::endl;
+    }
+}  // end of function output
+
+
 int main(int argc, char* argv[])
 {
-  //  declarations of variables
-  double *u, *dudr, *yout, r, step_size, r_max, E0;
-  double initial_u, initial_u_prime;
-  int i, number_of_steps, num_diff_eq;
-  char *outfilename;
-
+  const int NUM_DIFF_EQ = 2;
   const double R_N = 100;      //Range of potential
-  const int NUM_L_VALUES = 1;
-  //const double   A = R_N; //Matching point outside potential
+  const int NUM_L_VALUES = 3;
+  const int NUM_E_VALUES = 500;
+  const int MIN_E = 0.01;
+  //  declarations of variables
+  double *u, *dudr, *uout, r, step_size;
+  double initial_u, initial_u_prime;
+  int i, number_of_steps;
+  ofstream ofile_energy_0_1_files[NUM_L_VALUES];//0.1 MeV Energy 
+  ofstream ofile_energy_3_0_files[NUM_L_VALUES];//3.0 MeV Energy
+  ofstream phase_shift_file;
 
-  int L; //angular momentum quantum number
-  double E; //Energy (MeV)
+  ofile_energy_0_1_files[0].open("../output/output_L_0_energy_0_1_radial.dat");
+  ofile_energy_0_1_files[1].open("../output/output_L_1_energy_0_1_radial.dat");
+  ofile_energy_0_1_files[2].open("../output/output_L_2_energy_0_1_radial.dat");
 
-  double r_matrix[NUM_L_VALUES];
-  std::complex<double> s_matrix[NUM_L_VALUES];
-  std::complex<double> phase_shifts[NUM_L_VALUES];
+  ofile_energy_3_0_files[0].open("../output/output_L_0_energy_3_0_radial.dat");
+  ofile_energy_3_0_files[1].open("../output/output_L_1_energy_3_0_radial.dat");
+  ofile_energy_3_0_files[2].open("../output/output_L_2_energy_3_0_radial.dat");
+
+  phase_shift_file.open("../output/phase_shifts.dat");
+
+//  double E_values[NUM_E_VALUES]; //Energy (MeV)
+
+  double E_values[NUM_E_VALUES];
+            
+  
+  int e_index_0_1;
+  int e_index_3_0;
+               
+  for (int i = 0; i < NUM_E_VALUES; i++){
+    E_values[i] = MIN_E + 0.01*i; 
+    
+    if (abs(E_values[i] - 0.1) < 0.00001){
+      std::cout << "0.1 is at position" << i << std::endl;
+      e_index_0_1 = i;
+    }
+    else if (abs(E_values[i] - 3.0) < 0.00001){
+      std::cout << "3.0 is at position" << i << std::endl;
+      e_index_3_0 = i;
+    }
+  }
+  double r_matrix[NUM_L_VALUES][NUM_E_VALUES];
+  std::complex<double> s_matrix[NUM_L_VALUES][NUM_E_VALUES];
+  std::complex<double> phase_shifts[NUM_L_VALUES][NUM_E_VALUES];
+  for (int i = 0; i < NUM_L_VALUES; i++){
+    for (int j = 0; j < NUM_E_VALUES; j++){
+      s_matrix[i][j] = 0.0;
+      phase_shifts[i][j] = 0.0;
+      r_matrix[i][j] = 0.0;
+    }
+  }
 
   // Read in output file, abort if there are too few command-line arguments
-  if( argc <= 1 ){
-    cout << "Bad Usage: " << argv[0] <<
-      " read also output file on same line" << endl;
-    return 5;
-    //    exit(1);
-  }
-  else{
-    outfilename=argv[1];
-  }
-  ofile.open(outfilename);
+//if( argc <= 1 ){
+//  cout << "Bad Usage: " << argv[0] <<
+//    " read also output file on same line" << endl;
+//  return 5;
+//  //    exit(1);
+//}
+//else{
+//  outfilename=argv[1];
+//}
+  
+  initialize(number_of_steps);
 
-  //  this is the number of differential equations  
-  num_diff_eq = 2;     
-  //  allocate space in memory for the arrays containing the derivatives 
-  dudr = new double[num_diff_eq];
-  u = new double[num_diff_eq];
-  yout = new double[num_diff_eq];
-  // read in the initial position, velocity and number of steps 
-  initialize (E, L, number_of_steps);
-  //  setting initial values, step size and max position r_max  
-  step_size = R_N / ( (double) number_of_steps);   // the step size     
-  r_max = step_size*number_of_steps;       // the final time    
+  for (int L = 0; L < NUM_L_VALUES; L++){ 
+    for (int e_index = 0; e_index < NUM_E_VALUES; e_index++){
+      //  this is the number of differential equations  
+      //  allocate space in memory for the arrays containing the derivatives 
+      double E = E_values[e_index];
+      dudr = new double[NUM_DIFF_EQ];
+      u = new double[NUM_DIFF_EQ];
+      uout = new double[NUM_DIFF_EQ];
 
-  r = R_N/number_of_steps; // initial position      
-  //Based on equation 3.1.17 in text
-  u[0] = pow(r,L+1);       // initial wavefunction  
-  u[1] = (L+1)*pow(r,L);   // initial wf derivative  
 
-  // now we start solving the differential equations using the RK4 method 
-  while (r <= R_N){
-    derivatives(r, u, dudr, L, E);   // initial derivatives              
-    runge_kutta_4(u, dudr, num_diff_eq, r, step_size, 
-                  yout, L, E, derivatives); 
-    for (i = 0; i < num_diff_eq; i++) {
-      u[i] = yout[i];  
+      //  setting initial values, step size 
+      step_size = R_N / ( (double) number_of_steps);   // the step size     
+
+      r = R_N/number_of_steps; // initial position      
+      //Based on equation 3.1.17 in text
+      u[0] = pow(r,L+1);       // initial wavefunction  
+      u[1] = (L+1)*pow(r,L);   // initial wf derivative  
+
+      // now we start solving the differential equations using the RK4 method 
+      while (r <= R_N){
+        derivatives(r, u, dudr, L, E);   // initial derivatives              
+        runge_kutta_4(u, dudr, NUM_DIFF_EQ, r, step_size, 
+            uout, L, E, derivatives); 
+        for (i = 0; i < NUM_DIFF_EQ; i++) {
+          u[i] = uout[i];  
+        }
+        r += step_size;
+        if (e_index == e_index_0_1){
+          output_radial(ofile_energy_0_1_files[L], r,u);
+        }
+        else if (e_index == e_index_3_0){
+          output_radial(ofile_energy_3_0_files[L], r,u);
+        }
+      }
+
+      r_matrix[L][e_index] = calculateRMatrix(u, R_N);
+      s_matrix[L][e_index] = calculateSMatrix(u, R_N, r,L,E);
+      phase_shifts[L][e_index] = calculatePhaseShift(s_matrix[L][e_index]);
+
+
+//    std::cout << "For L = " << L << " and E = " << E  << ": " << std::endl
+//              << "R Matrix: " << r_matrix[L][e_index]
+//              << "S Matrix: " << s_matrix[L][e_index]
+//              << "Phase Shift is: " << phase_shifts[L][e_index] << std::endl;
+      delete [] u; delete [] dudr; delete [] uout; 
     }
-    r += step_size;
-    output(r, u);   // write to file 
   }
 
-  r_matrix[L] = calculateRMatrix(u, R_N);
-  s_matrix[L] = calculateSMatrix(u, R_N, r,L,E);
-  phase_shifts[L] = calculatePhaseShift(s_matrix[L]);
-
-
-  std::cout << "For L = " << L << " and E = " << E  << ": " << std::endl
-            << "R Matrix is: " << r_matrix[L] << std::endl
-            << "S Matrix is: " << s_matrix[L] << std::endl
-            << "Phase Shift is: " << phase_shifts[L] << std::endl;
-
-
-  delete [] u; delete [] dudr; delete [] yout; 
-  ofile.close();  // close output file
+  output_phase_shifts(phase_shift_file , phase_shifts, E_values);
+  phase_shift_file.close();
+  for (int L = 0; L < NUM_L_VALUES;L++){
+    ofile_energy_0_1_files[L].close();
+    ofile_energy_3_0_files[L].close();
+  }
   return 0;
 }   //  End of main function 
 
 //     Read in from screen the number of steps,
 //     initial position and initial speed 
-void initialize (double& E, int& L, int& number_of_steps)
+void initialize (int& number_of_steps)
 {
   cout << "Number of steps: ";
   cin >> number_of_steps;
-
-  cout << "Energy (MeV): ";
-  cin >> E;
-  cout << "L-Value: ";
-  cin >> L;
 }  // end of function initialize  
 
 //   this function sets up the derivatives for this special case  
@@ -172,16 +238,10 @@ void derivatives(double r, double *u, double *dudr,
 } // end of function derivatives  
 
 //    function to write out the final results
-void output(double r, double *u)
-{
-  ofile << setiosflags(ios::showpoint | ios::uppercase);
-  ofile << setw(15) << setprecision(8) << r;
-  ofile << setw(15) << setprecision(8) << u[0];
-  ofile << setw(15) << setprecision(8) << u[1] << std::endl;
-}  // end of function output
+
 
 /*   This function upgrades a function y (input as a pointer)
-     and returns the result yout, also as a pointer. Note that
+     and returns the result uout, also as a pointer. Note that
      these variables are declared as arrays.  It also receives as
      input the starting value for the derivatives in the pointer
      dydx. It receives also the variable n which represents the 
@@ -190,7 +250,7 @@ void output(double r, double *u)
      function *derivs where the given derivative is computed
  */
 void runge_kutta_4(double *y, double *dydx, int n, double x, double h, 
-    double *yout, int L, double E, void (*derivs)(double, double *, double *, int, double))
+    double *uout, int L, double E, void (*derivs)(double, double *, double *, int, double))
 {
   int i;
   double      xh,hh,h6; 
@@ -215,9 +275,9 @@ void runge_kutta_4(double *y, double *dydx, int n, double x, double h,
     dym[i] += dyt[i];
   }
   (*derivs)(x+h,yt,dyt, L, E);    // computation of k4, eq. 3.62   
-  //      now we upgrade y in the array yout  
+  //      now we upgrade y in the array uout  
   for (i = 0; i < n; i++){
-    yout[i] = y[i]+h6*(dydx[i]+dyt[i]+2.0*dym[i]);
+    uout[i] = y[i]+h6*(dydx[i]+dyt[i]+2.0*dym[i]);
   }
   delete []dym;
   delete [] dyt;
