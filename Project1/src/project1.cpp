@@ -1,36 +1,10 @@
-/*    This program solves Newton's equation for a block
-      sliding on a horizontal frictionless surface. The block
-      is tied  to a wall with a spring, and Newton's equation
-      takes the form
-      m d^2x/dt^2 =-kx
-      with k the spring tension and m the mass of the block.
-      The angular frequency is omega^2 = k/m and we set it equal
-      1 in this example program. 
-
-      Newton's equation is rewritten as two coupled differential
-      equations, one for the position x  and one for the velocity v
-      dx/dt = v    and
-      dv/dt = -x   when we set k/m=1
-
-      We use therefore a two-dimensional array to represent x and v
-      as functions of t
-      y[0] == x
-      y[1] == v
-      dy[0]/dt = v
-      dy[1]/dt = -x
-
-      The derivatives are calculated by the user defined function 
-      derivatives.
-
-      The user has to specify the initial velocity (usually v_0=0)
-      the number of steps and the initial position. In the programme
-      below we fix the time interval [a,b] to [0,2*pi].
-
- */ 
+/*  This program solves the radial equation for
+ *  Be-10 + n scattering. */ 
 #include <cmath>
 #include <iostream>
 #include <fstream>
 #include <iomanip>
+#include <complex>
 //#include "lib.h"
 using namespace  std;
 // output file as global variable
@@ -38,7 +12,7 @@ ofstream ofile;
 // function declarations
 void derivatives(double, double*,  double*,
                     int, double);
-void initialise ( double&, double&, int&);
+void initialize ( double&, int&, int&);
 void output( double, double *);
 void runge_kutta_4(double *, double *, int, double, double, 
     double *, int, double, void (*)(double, double *, double *, int, double));
@@ -54,6 +28,50 @@ double calculateWS(double R){
   return  (V0/(1+exp((R-R_WS)/a_ws)));
 }
 
+//Pass in initial wave_function and derivative as u[0], u[1]
+//respectively and A the matching radius. Make sure the u
+//values correspond to u(a)
+double calculateRMatrix(double *u, double A){
+  return (1/A)*u[0]/u[1];
+}
+
+//H[0] will be set to H+, while H[1] will be set to H-
+void  calculateH(std::complex<double>* H, double r, int L, double E){
+  std::complex<double> i(0,1);
+  const double MU2H        = 0.0478450; // 1/(MeV*fm^2)
+  double k = sqrt(MU2H*E);//1/fm
+  double rho = k*r;
+
+  H[0] = pow(i,-L)*exp(i*rho); 
+  H[1] = pow(i,L)*exp(-i*rho); 
+}
+
+void  calculateH_Prime(std::complex<double>* H_prime, double r, int L, double E){
+  const double MU2H        = 0.0478450; // 1/(MeV*fm^2)
+  std::complex<double> i(0,1);
+  double k = sqrt(MU2H*E);//1/fm
+  double rho = k*r;
+  H_prime[0] = k*pow(i,-L+1)*exp(i*rho); 
+  H_prime[1] = -k*pow(i,L+1)*exp(-i*rho); 
+}
+
+std::complex<double> calculateSMatrix(double *u, const double R_N, double r, int L, double E){
+  std::complex<double> H[2];
+  std::complex<double> H_prime[2];
+  calculateH(H, r,L,E); 
+  calculateH_Prime(H_prime, r,L,E);
+  double R_L = calculateRMatrix(u,R_N);
+  //Calculated from equation 3.1.30 in the book. Note R_N = a
+  std::complex<double> S = (H[1]-R_N*R_L*H_prime[1]) / (H[0]-R_N*R_L*H_prime[0]);
+  return S;
+}
+
+std::complex<double> calculatePhaseShift(std::complex<double> S_L){
+  std::complex<double> i(0,1);
+  std::complex<double> phase_shift = (1./(2.*i))*log(S_L);
+  return phase_shift;
+}
+
 int main(int argc, char* argv[])
 {
   //  declarations of variables
@@ -63,11 +81,16 @@ int main(int argc, char* argv[])
   char *outfilename;
 
   const double R_N = 100;      //Range of potential
-  const double   A = R_N; //Matching point outside potential
+  const int NUM_L_VALUES = 1;
+  //const double   A = R_N; //Matching point outside potential
 
-  int L = 0; //angular momentum quantum number
-  double E = 0.1; //Energy (MeV)
-  
+  int L; //angular momentum quantum number
+  double E; //Energy (MeV)
+
+  double r_matrix[NUM_L_VALUES];
+  std::complex<double> s_matrix[NUM_L_VALUES];
+  std::complex<double> phase_shifts[NUM_L_VALUES];
+
   // Read in output file, abort if there are too few command-line arguments
   if( argc <= 1 ){
     cout << "Bad Usage: " << argv[0] <<
@@ -87,15 +110,18 @@ int main(int argc, char* argv[])
   u = new double[num_diff_eq];
   yout = new double[num_diff_eq];
   // read in the initial position, velocity and number of steps 
-  initialise (initial_u, initial_u_prime, number_of_steps);
+  initialize (E, L, number_of_steps);
   //  setting initial values, step size and max position r_max  
-  step_size = A / ( (double) number_of_steps);   // the step size     
+  step_size = R_N / ( (double) number_of_steps);   // the step size     
   r_max = step_size*number_of_steps;       // the final time    
-  u[0] = initial_u;                       // initial wavefunction  
-  u[1] = initial_u_prime;                 // initial wf derivative  
-  r=0.1;                                  // initial position      
+
+  r = R_N/number_of_steps; // initial position      
+  //Based on equation 3.1.17 in text
+  u[0] = pow(r,L+1);       // initial wavefunction  
+  u[1] = (L+1)*pow(r,L);   // initial wf derivative  
+
   // now we start solving the differential equations using the RK4 method 
-  while (r <= A){
+  while (r <= R_N){
     derivatives(r, u, dudr, L, E);   // initial derivatives              
     runge_kutta_4(u, dudr, num_diff_eq, r, step_size, 
                   yout, L, E, derivatives); 
@@ -105,22 +131,35 @@ int main(int argc, char* argv[])
     r += step_size;
     output(r, u);   // write to file 
   }
-  delete [] u; delete [] dudr; delete [] yout;
+
+  r_matrix[L] = calculateRMatrix(u, R_N);
+  s_matrix[L] = calculateSMatrix(u, R_N, r,L,E);
+  phase_shifts[L] = calculatePhaseShift(s_matrix[L]);
+
+
+  std::cout << "For L = " << L << " and E = " << E  << ": " << std::endl
+            << "R Matrix is: " << r_matrix[L] << std::endl
+            << "S Matrix is: " << s_matrix[L] << std::endl
+            << "Phase Shift is: " << phase_shifts[L] << std::endl;
+
+
+  delete [] u; delete [] dudr; delete [] yout; 
   ofile.close();  // close output file
   return 0;
 }   //  End of main function 
 
 //     Read in from screen the number of steps,
 //     initial position and initial speed 
-void initialise (double& initial_u, double& initial_u_prime, int& number_of_steps)
+void initialize (double& E, int& L, int& number_of_steps)
 {
-  cout << "Wavefunction at R = 0: ";
-  cin >> initial_u;
-  cout << "Derivative of WF at R = 0: ";
-  cin >> initial_u_prime;
-  cout << "Number of steps = ";
+  cout << "Number of steps: ";
   cin >> number_of_steps;
-}  // end of function initialise  
+
+  cout << "Energy (MeV): ";
+  cin >> E;
+  cout << "L-Value: ";
+  cin >> L;
+}  // end of function initialize  
 
 //   this function sets up the derivatives for this special case  
 void derivatives(double r, double *u, double *dudr,
