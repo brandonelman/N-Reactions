@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iomanip>
 #include <complex>
+#define NUM_E_VALUES 5000
 //#include "lib.h"
 using namespace  std;
 // output file as global variable
@@ -79,15 +80,23 @@ void output_radial(std::ofstream& ofile, double r, double *u){
 }  // end of function output
 
 
-void output_phase_shifts(std::ofstream& ofile, std::complex<double> phase_shift[3][500], double E[500]){
-  const int NUM_E_VALUES = 500;
+void output_phase_shifts(std::ofstream& ofile, std::complex<double> phase_shift[3][NUM_E_VALUES], double E[NUM_E_VALUES]){
+//  const int NUM_E_VALUES = 500;
   const int NUM_L_VALUES = 3;
+  const int PI = 3.14159265358979323846;
 
     for (int i = 0; i < NUM_E_VALUES; i++){
       ofile << setiosflags(ios::showpoint | ios::uppercase);
       ofile << setw(15) << setprecision(8) << E[i];
+      if (phase_shift[0][i].real() < 0){
+        phase_shift[0][i] += PI;
+      }
       ofile << setw(15) << setprecision(8) << phase_shift[0][i].real();
       ofile << setw(15) << setprecision(8) << phase_shift[1][i].real();
+
+      if (phase_shift[2][i].real() > 0){
+        phase_shift[2][i] -= PI;
+      }
       ofile << setw(15) << setprecision(8) << phase_shift[2][i].real() << std::endl;
     }
 }  // end of function output
@@ -98,8 +107,9 @@ int main(int argc, char* argv[])
   const int NUM_DIFF_EQ = 2;
   const double R_N = 100;      //Range of potential
   const int NUM_L_VALUES = 3;
-  const int NUM_E_VALUES = 500;
-  const int MIN_E = 0.01;
+  const double ENERGY_SPACING = 0.001;
+//  const int NUM_E_VALUES = 500;
+  const int MIN_E = ENERGY_SPACING;
   //  declarations of variables
   double *u, *dudr, *uout, r, step_size;
   double initial_u, initial_u_prime;
@@ -127,7 +137,7 @@ int main(int argc, char* argv[])
   int e_index_3_0;
                
   for (int i = 0; i < NUM_E_VALUES; i++){
-    E_values[i] = MIN_E + 0.01*i; 
+    E_values[i] = MIN_E + ENERGY_SPACING*i; 
     
     if (abs(E_values[i] - 0.1) < 0.00001){
       std::cout << "0.1 is at position" << i << std::endl;
@@ -200,8 +210,7 @@ int main(int argc, char* argv[])
       r_matrix[L][e_index] = calculateRMatrix(u, R_N);
       s_matrix[L][e_index] = calculateSMatrix(u, R_N, r,L,E);
       phase_shifts[L][e_index] = calculatePhaseShift(s_matrix[L][e_index]);
-
-
+      
 //    std::cout << "For L = " << L << " and E = " << E  << ": " << std::endl
 //              << "R Matrix: " << r_matrix[L][e_index]
 //              << "S Matrix: " << s_matrix[L][e_index]
