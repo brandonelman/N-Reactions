@@ -83,7 +83,7 @@ void output_radial(std::ofstream& ofile, double r, double *u){
 void output_phase_shifts(std::ofstream& ofile, std::complex<double> phase_shift[3][NUM_E_VALUES], double E[NUM_E_VALUES]){
 //  const int NUM_E_VALUES = 500;
   const int NUM_L_VALUES = 3;
-  const int PI = 3.14159265358979323846;
+  const double PI = 4*atan(1);
 
     for (int i = 0; i < NUM_E_VALUES; i++){
       ofile << setiosflags(ios::showpoint | ios::uppercase);
@@ -94,8 +94,8 @@ void output_phase_shifts(std::ofstream& ofile, std::complex<double> phase_shift[
       ofile << setw(15) << setprecision(8) << phase_shift[0][i].real();
       ofile << setw(15) << setprecision(8) << phase_shift[1][i].real();
 
-      if (phase_shift[2][i].real() > 0){
-        phase_shift[2][i] -= PI;
+      if (phase_shift[2][i].real() < 0){
+        phase_shift[2][i] += PI;
       }
       ofile << setw(15) << setprecision(8) << phase_shift[2][i].real() << std::endl;
     }
